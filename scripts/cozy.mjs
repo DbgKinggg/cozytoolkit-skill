@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { randomUUID, createHash } from "node:crypto";
 export async function run(args, env = process.env) {
   const [group, maybeAction, ...rest] = args;
   if (!group || group === "help" || group === "--help")
     return `CozyToolkit · hosted links, tracked QR and analytics
-Node.js 22.18+. Set COZYTOOLKIT_API_KEY in your environment.
+Node.js 22.18+. Try without a key: 3 links/network/day, expiring after 7 days.
+Set COZYTOOLKIT_API_KEY for account-linked usage. Trial receipts save locally.
 
 usage
 quote --action link.create|tracking.purchase
@@ -80,7 +83,8 @@ with the same request ID printed to stderr. There are no automatic retries or to
     throw new Error(
       "Use https://cozytoolkit.com or an explicit local development server.",
     );
-  if (!/^cozy_live_[a-f0-9]{64}$/.test(env.COZYTOOLKIT_API_KEY || ""))
+  const hasKey = !!env.COZYTOOLKIT_API_KEY;
+  if (hasKey && !/^cozy_live_[a-f0-9]{64}$/.test(env.COZYTOOLKIT_API_KEY))
     throw new Error(
       "Set COZYTOOLKIT_API_KEY in your environment. Never put the key in a prompt.",
     );
@@ -151,7 +155,7 @@ with the same request ID printed to stderr. There are no automatic retries or to
     body = { maxCredits: Number(need("max-credits")) };
   }
   const headers = {
-    Authorization: `Bearer ${env.COZYTOOLKIT_API_KEY}`,
+    ...(hasKey ? { Authorization: `Bearer ${env.COZYTOOLKIT_API_KEY}` } : {}),
     "Content-Type": "application/json",
   };
   if (group === "capacity" || (group === "links" && action === "create")) {
@@ -160,6 +164,53 @@ with the same request ID printed to stderr. There are no automatic retries or to
       throw new Error("Invalid request ID.");
     headers["Idempotency-Key"] = requestId;
     process.stderr.write(`Request ID: ${requestId}\n`);
+  }
+  const receiptDir = join(
+    env.COZYTOOLKIT_TRIAL_DIR ||
+      join(homedir(), ".config", "cozytoolkit", "trials"),
+    createHash("sha256").update(root.origin).digest("hex").slice(0, 16),
+  );
+  const creatingTrial = !hasKey && group === "links" && action === "create";
+  if (!hasKey) {
+    if (group === "usage") path = "/trial";
+    else if (creatingTrial) {
+      if (
+        body.maxCredits !== 0 ||
+        body.alias !== undefined ||
+        body.tags !== undefined
+      )
+        throw new Error(
+          "Trial links use random aliases and zero credits. Set an API key for account options.",
+        );
+      await mkdir(receiptDir, { recursive: true, mode: 0o700 });
+    } else if (
+      group === "qr" ||
+      group === "analytics" ||
+      (group === "links" && action === "get")
+    ) {
+      let receipt;
+      try {
+        receipt = JSON.parse(
+          await readFile(
+            join(receiptDir, id().toLowerCase() + ".json"),
+            "utf8",
+          ),
+        );
+      } catch {
+        throw new Error(
+          "No local trial receipt for this link. Use the same machine that created it, or set an API key for account links.",
+        );
+      }
+      if (
+        !/^[a-f0-9]{64}$/.test(receipt.trialToken) ||
+        receipt.origin !== root.origin
+      )
+        throw new Error("Invalid trial receipt.");
+      headers["X-Cozy-Trial-Token"] = receipt.trialToken;
+    } else
+      throw new Error(
+        "This action needs an account API key. Without one, try links create, links get, qr, analytics or usage.",
+      );
   }
   const url = new URL("/api/v1" + path, root);
   url.search = params.toString();
@@ -192,6 +243,45 @@ with the same request ID printed to stderr. There are no automatic retries or to
       code = JSON.parse(text).error || code;
     } catch {}
     throw new Error(`HTTP ${response.status}: ${code}`);
+  }
+  if (creatingTrial) {
+    const result = JSON.parse(text);
+    if (
+      !/^[a-f0-9-]{36}$/i.test(result.id) ||
+      !/^[a-f0-9]{64}$/.test(result.trialToken)
+    )
+      throw new Error(
+        "Invalid trial response. Retry with the same request ID.",
+      );
+    const { trialToken, ...safe } = result;
+    const receipt = {
+      trialToken,
+      origin: root.origin,
+      expiresAt: result.expiresAt,
+    };
+    try {
+      await writeFile(
+        join(receiptDir, result.id.toLowerCase() + ".json"),
+        JSON.stringify(receipt),
+        { mode: 0o600, flag: "wx" },
+      );
+    } catch (e) {
+      if (e.code !== "EEXIST")
+        throw new Error(
+          "Could not save the trial receipt. Fix local storage and retry with the same request ID.",
+        );
+      const saved = JSON.parse(
+        await readFile(
+          join(receiptDir, result.id.toLowerCase() + ".json"),
+          "utf8",
+        ),
+      );
+      if (saved.trialToken !== trialToken || saved.origin !== root.origin)
+        throw new Error(
+          "Trial receipt conflict. Existing receipt was not replaced.",
+        );
+    }
+    return JSON.stringify({ ...safe, receiptSaved: true }, null, 2);
   }
   if (output) {
     await writeFile(output, text, { flag: "wx" });

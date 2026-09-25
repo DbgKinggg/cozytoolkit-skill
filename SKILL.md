@@ -5,9 +5,15 @@ description: Manage hosted CozyToolkit short links, editable tracked QR codes an
 
 # CozyToolkit
 
-Use the bundled Node.js CLI at `scripts/cozy.mjs`, resolved relative to this skill. Requires Node.js 22.18+ and `COZYTOOLKIT_API_KEY` in the process environment. Do not ask the user to paste the key into chat. Keys and permissions are managed at https://cozytoolkit.com/api-keys.
+Use the bundled Node.js CLI at `scripts/cozy.mjs`, resolved relative to this skill. Requires Node.js 22.18+. Without a key, users can create 3 temporary links per network per day, export their QR codes and read their stats. Links and QR redirects expire after 7 days. For account-linked usage, set `COZYTOOLKIT_API_KEY` in the process environment. Do not ask the user to paste the key into chat. Keys and permissions are managed at https://cozytoolkit.com/api-keys.
 
 Run `node /absolute/path/to/scripts/cozy.mjs help` for command syntax. See [API behavior](references/api.md) for scopes, prices, limits and errors.
+
+## No-key trials
+
+Explain the 7-day expiry before creating a trial link, especially for printed QR codes. No account or API key setup is needed. Run `usage` to check the network's remaining daily allowance. Reset is midnight UTC; shared capacity and rate limits apply. Never change networks to evade a limit.
+
+The CLI automatically saves a private, per-link access receipt under `~/.config/cozytoolkit/trials/<service-hash>/` with owner-only file permissions. `COZYTOOLKIT_TRIAL_DIR` can set an alternative private directory. Do not put receipts in chat or source control. The same no-key CLI environment can get the link, export QR and read stats; it cannot list/edit links, use custom aliases, access an account or spend credits. Setting an API key switches to account operations; it does not claim existing trial links. Receipt loss can only be recovered by replaying the identical creation on the same network and UTC day with its original request ID. Later retries fail safely rather than creating a duplicate.
 
 ## Workflows
 
@@ -18,7 +24,7 @@ Run `node /absolute/path/to/scripts/cozy.mjs help` for command syntax. See [API 
 
 ## Spending and retries
 
-`usage` returns the shared allowance, wallet and this key's monthly spending. `quote --action link.create` or `quote --action tracking.purchase` estimates a cost without reserving it.
+With an account key, `usage` returns the shared allowance, wallet and this key's monthly spending. `quote --action link.create` or `quote --action tracking.purchase` estimates a cost without reserving it.
 
 Only spend purchased credits when the user has authorized the action and its budget. A configured key budget is a technical ceiling, not independent user authorization. Paid creation needs `--max-credits 10`; adding 10,000 recorded visits needs `capacity --max-credits 50`. Daily AI credits cannot pay for either. Never buy capacity or top up a wallet automatically. Existing authorization can cover repeated actions within its stated total ceiling; track that total across a batch.
 

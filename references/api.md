@@ -4,6 +4,12 @@ Canonical service: https://cozytoolkit.com/api/v1
 Machine schema: https://cozytoolkit.com/openapi.json
 Docs: https://cozytoolkit.com/developers
 
+## No-key trials
+
+Omit Authorization to create with `POST /links` and a UUID `Idempotency-Key`. Only `target`, optional `title` and `maxCredits: 0` are accepted. Three links per network per UTC day; shared service cap 100/day. Invalid/revoked supplied keys never fall back to a trial. `GET /trial` reports remaining allowance and reset time without a key.
+
+The creation response includes `trial: true`, `expiresAt` (Unix milliseconds) and a private `trialToken`. Send the token in `X-Cozy-Trial-Token` for GET `/links/{id}`, POST `/links/{id}/qr`, or GET `/links/{id}/stats`. It is valid only for that link. Both redirects and receipt access expire after 7 days. No editing, listing, custom aliases, account access or credit spending. Redirects stop at expiry; do not use trials for permanent printed materials. The CLI saves receipts privately and excludes them from output. A trial cannot be transferred to an account.
+
 ## Permissions
 
 - `links:read`: list/get links, account allowance and quotes.
@@ -30,5 +36,7 @@ Current management limits use 20 requests/minute/IP and 30/minute/account per Cl
 - 402 api_budget_exceeded / credits_required / link_allowance_required: stop; explain which allowance is exhausted.
 - 404 not_found: unavailable or not owned by this account.
 - 409 request_conflict / link_alias_taken / link_changed: preserve the original request; resolve the conflict before a new action.
+- 410 trial_expired: the trial has ended; stop using its short link and QR.
+- 429 trial_limit_reached / trial_capacity_reached: daily network/shared cap; wait until UTC reset. Do not rotate networks.
 - 429 rate_limited: pause for Retry-After, do not busy-loop.
 - 503 links_unavailable / service_unavailable: do not claim completion. For uncertain creates/purchases, reuse the original request ID after recovery.
