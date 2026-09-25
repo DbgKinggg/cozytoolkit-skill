@@ -1,0 +1,4 @@
+interface:
+  display_name: "CozyToolkit"
+  short_description: "Hosted short links, tracked QR codes and analytics"
+  default_prompt: "Use $cozytoolkit to manage my campaign links, tracked QR codes or traffic reports."
