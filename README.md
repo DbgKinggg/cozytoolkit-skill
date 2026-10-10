@@ -13,3 +13,13 @@ Try: “Create a 7-day trial link for my launch and export a sage QR code. I don
 The website and API share free monthly link allowances. Purchased credits require an explicitly enabled key budget and a request spending ceiling. See https://cozytoolkit.com/developers and https://cozytoolkit.com/pricing. Service limits apply; public payment availability is shown in billing.
 
 This repository contains only the skill, a dependency-free CLI and tests. It does not contain the CozyToolkit application, credentials or customer data. Run tests with `node --test tests/cli.test.mjs`.
+
+## AI model research
+
+A separate, free read-only skill compares models, provider-specific IDs and estimated token costs from refreshed catalog snapshots.
+
+```sh
+npx skills add DbgKinggg/cozytoolkit-skill --skill cozy-models --full-depth
+```
+
+No key needed. An optional CozyToolkit key raises read limits; catalog queries never spend credits. See `skills/cozy-models/SKILL.md`. Run its tests with `node --test skills/cozy-models/tests/cli.test.mjs`.

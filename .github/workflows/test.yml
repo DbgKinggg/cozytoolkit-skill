@@ -11,4 +11,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-      - run: node --test tests/cli.test.mjs
+      - run: node --test tests/cli.test.mjs skills/cozy-models/tests/cli.test.mjs
